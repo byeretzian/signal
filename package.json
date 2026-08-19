@@ -1,0 +1,13 @@
+{
+  "name": "signal",
+  "private": true,
+  "workspaces": ["apps/web"],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @signal/web",
+    "build:web": "npm run build --workspace @signal/web",
+    "lint:web": "npm run lint --workspace @signal/web",
+    "typecheck:web": "npm run typecheck --workspace @signal/web"
+  },
+  "engines": { "node": ">=20.9" }
+}
+

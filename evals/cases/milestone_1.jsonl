@@ -1,0 +1,3 @@
+{"id":"growth-30d","question":"How much has this artist grown over the last 30 days?","expected_tool":"calculate_growth","expected_days":30,"checks":["tool_selection","arguments","numeric_correctness","unsupported_claims"]}
+{"id":"unsupported-label","question":"Which label released this artist's debut?","expected_tool":null,"checks":["unsupported_claims"]}
+
