@@ -25,6 +25,14 @@ class NormalizedRelease(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ArtistListeningMetrics(BaseModel):
+    source: str
+    external_id: str
+    listen_count: int | None = Field(default=None, ge=0)
+    listener_count: int | None = Field(default=None, ge=0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class ArtistMetadataProvider(Protocol):
     def search_artists(self, query: str, *, limit: int = 10) -> list[NormalizedArtist]: ...
 
@@ -35,6 +43,10 @@ class ReleaseMetadataProvider(Protocol):
     def get_artist_releases(
         self, artist_external_id: str, *, limit: int = 25
     ) -> list[NormalizedRelease]: ...
+
+
+class ListeningMetricsProvider(Protocol):
+    def get_artist_metrics(self, artist_external_id: str) -> ArtistListeningMetrics: ...
 
 
 class ArtistRead(BaseModel):
@@ -57,3 +69,15 @@ class ReleaseRead(BaseModel):
     release_type: str | None
     status: str | None
     external_ids: dict[str, str]
+
+
+class MetricSnapshotRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    artist_id: str
+    snapshot_date: date
+    source: str
+    listen_count: int | None
+    listener_count: int | None
+    provider_metadata: dict[str, Any]

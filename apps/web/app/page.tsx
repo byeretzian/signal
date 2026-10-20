@@ -71,7 +71,7 @@ export default function Home() {
     setBusy("import");
     try {
       const imported = await api<{ artist: PersistedArtist }>(
-        `/artists/import/${candidate.external_id}`,
+        `/artists/import/${candidate.external_id}?include_demo_metrics=true`,
         { method: "POST" },
       );
       setArtist(imported.artist);
@@ -209,8 +209,7 @@ export default function Home() {
         )}
       </section>
 
-      <footer><span>Signal / Milestone 1</span><span>MusicBrainz catalog · deterministic metrics</span></footer>
+      <footer><span>Signal / Milestone 2</span><span>MusicBrainz catalog · deterministic metrics</span></footer>
     </main>
   );
 }
-

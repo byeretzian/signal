@@ -13,7 +13,8 @@ FastAPI modular monolith
     ├── catalog repositories ─────────┐
     ├── deterministic analytics ──────┼── PostgreSQL
     ├── LangGraph orchestration ──────┘
-    └── MusicBrainz provider ─────────── MusicBrainz API
+    ├── MusicBrainz provider ─────────── MusicBrainz API
+    └── ListenBrainz provider ────────── ListenBrainz API
 ```
 
 ## Decisions
@@ -27,9 +28,9 @@ for it.
 
 ### Provider-neutral domain
 
-`ArtistMetadataProvider` and `ReleaseMetadataProvider` protocols return Pydantic normalized models.
-MusicBrainz wire models and response quirks stay inside its adapter. Provider identifiers have their
-own relational tables instead of provider-named columns.
+`ArtistMetadataProvider`, `ReleaseMetadataProvider`, and `ListeningMetricsProvider` protocols return
+Pydantic normalized models. Provider wire models and response quirks stay inside their adapters.
+Provider identifiers have their own relational tables instead of provider-named columns.
 
 ### Explicit imports
 
@@ -74,6 +75,11 @@ MusicBrainz requests use:
 - Typed validation and structured provider exceptions.
 - Structured timing logs.
 
+ListenBrainz artist popularity uses its typed batch endpoint with one MusicBrainz artist ID per
+refresh. The adapter sends an optional user token, honors `X-RateLimit-Reset-In` on retries, validates
+the returned artist ID and nonnegative counts, and records the cumulative metric semantics in
+snapshot metadata. Refreshing the same artist twice on one calendar day updates the existing row.
+
 API requests receive correlation IDs. Agent runs receive run IDs. Tool and provider calls record
 duration and outcome without logging credentials.
 
@@ -84,6 +90,8 @@ duration and outcome without logging credentials.
 | Database health failure | `/health` returns 503 |
 | MusicBrainz transient exhaustion | API returns 502 with structured detail |
 | Invalid MusicBrainz JSON shape | Provider response error; nothing persisted |
+| ListenBrainz transient exhaustion | API returns 502; no snapshot is committed |
+| Missing MusicBrainz artist ID | Metrics refresh returns 409 |
 | Artist absent | API returns 404 |
 | Missing snapshots | Tool returns `insufficient_data` |
 | Zero starting metric | Absolute change returned; percentage explicitly undefined |
@@ -91,10 +99,9 @@ duration and outcome without logging credentials.
 
 ## Future seams
 
-- Add ListenBrainz behind a `ListeningMetricsProvider`.
+- Schedule recurring ListenBrainz refreshes after the manual ingestion seam is proven.
 - Add a cache implementation behind the provider rather than inside routes.
 - Expose tools via MCP.
 - Persist agent/tool run events to an observability store.
 - Execute JSONL evaluation cases against graph traces.
 - Split deployments only when operational evidence supports it.
-

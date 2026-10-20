@@ -8,6 +8,9 @@ Milestone 1 is a production-minded vertical slice: search MusicBrainz, persist a
 releases, attach clearly labeled synthetic demonstration snapshots, and ask how the artist changed
 over 30 days. The LLM plans the request; SQL/Python performs the calculation.
 
+Milestone 2 is underway. Its first slice adds provider-reported ListenBrainz popularity snapshots,
+idempotent daily refreshes, and explicit provenance without manufacturing historical data.
+
 ## Why it exists
 
 Music questions often mix catalog knowledge with numerical claims. Signal separates those concerns:
@@ -22,6 +25,7 @@ the agent explains verified tool output. When data is absent, it says so.
 - Calculate listener or listen-count growth from stored snapshots.
 - Route growth questions through a LangGraph workflow and record tool arguments and duration.
 - Use an OpenAI-backed structured planner when configured, with a deterministic offline fallback.
+- Refresh cumulative ListenBrainz listen and unique-listener counts into one daily snapshot.
 - Explore the complete slice in a responsive Next.js interface.
 
 ## Architecture
@@ -48,9 +52,9 @@ Then open:
 - API documentation: http://localhost:8000/docs
 - Health: http://localhost:8000/health
 
-The API service applies Alembic migrations at startup. Importing an artist attaches 31 synthetic
-`demo` snapshots so the Milestone 1 analytics workflow can be exercised. Responses visibly identify
-that these are demonstration values and not MusicBrainz listening data.
+The API service applies Alembic migrations at startup. API imports do not create synthetic metrics
+unless `include_demo_metrics=true` is passed explicitly. The current Milestone 1 web workflow opts
+in so its 30-day demonstration remains usable while real ListenBrainz history accumulates.
 
 To seed a standalone demo artist manually:
 
@@ -76,7 +80,7 @@ npm run typecheck:web
 npm run build:web
 ```
 
-Automated tests mock external HTTP. They do not consume MusicBrainz or OpenAI quota.
+Automated tests mock external HTTP. They do not consume MusicBrainz, ListenBrainz, or OpenAI quota.
 
 ## Configuration
 
@@ -87,6 +91,10 @@ Automated tests mock external HTTP. They do not consume MusicBrainz or OpenAI qu
 | `MUSICBRAINZ_CONTACT` | Yes | Documented maintainer contact |
 | `MUSICBRAINZ_BASE_URL` | No | Defaults to the public v2 API |
 | `MUSICBRAINZ_TIMEOUT_SECONDS` | No | External request timeout |
+| `LISTENBRAINZ_BASE_URL` | No | Defaults to the public ListenBrainz API |
+| `LISTENBRAINZ_USER_AGENT` | Yes | App/version plus valid maintainer contact |
+| `LISTENBRAINZ_USER_TOKEN` | No | Optional authentication and higher rate limits |
+| `LISTENBRAINZ_TIMEOUT_SECONDS` | No | External request timeout |
 | `OPENAI_API_KEY` | No | Enables LLM structured planning |
 | `OPENAI_MODEL` | No | Model used only for question planning |
 | `CORS_ORIGINS` | No | Comma-separated trusted web origins |
@@ -104,8 +112,12 @@ still performed only by `calculate_growth`.
 
 1. `GET /artists/search?q=...` returns MusicBrainz candidates without mutating state.
 2. `POST /artists/import/{musicbrainz_id}` explicitly persists the chosen artist and releases.
-3. `GET /artists/{id}` retrieves the normalized record.
-4. `POST /query` accepts a question, artist ID, metric source, and optional end date.
+3. `POST /artists/{id}/metrics/refresh` fetches and idempotently stores today's ListenBrainz totals.
+4. `GET /artists/{id}` retrieves the normalized record.
+5. `POST /query` accepts a question, artist ID, metric source, and optional end date.
+
+ListenBrainz reports cumulative totals, not retroactive daily history. Signal stores the observation
+date and calculates growth only after enough real snapshots have accumulated.
 
 Example query body:
 
@@ -122,7 +134,7 @@ caveats, run ID, and verified tool trace.
 
 ## Roadmap
 
-- Replace demonstration snapshots with ListenBrainz ingestion.
+- Accumulate and schedule provider-reported ListenBrainz snapshots.
 - Add genre/style, label, track, and richer artist-credit models.
 - Add MCP transport adapters over the typed catalog and analytics tools.
 - Add 7/30/90-day acceleration, peer percentiles, anomaly detection, and ranking.
