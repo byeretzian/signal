@@ -52,9 +52,10 @@ range access.
 
 ## Metric provenance
 
-The `source` value is mandatory. Milestone 1 uses `demo` for synthetic values; UI and API responses
-identify these values as demonstrations. Later ingestion must use a provider identifier such as
-`listenbrainz` and preserve useful raw provenance in metadata.
+The `source` value is mandatory. `demo` identifies synthetic values and is opt-in. Milestone 2 uses
+`listenbrainz` for provider-reported cumulative totals and stores the MusicBrainz artist ID plus
+metric semantics in metadata. Repeating a refresh on the same day updates the existing unique row;
+Signal does not backfill invented daily history.
 
 ## Growth definition
 
@@ -67,4 +68,3 @@ percentage_change = ((end_value - start_value) / start_value) * 100
 The function returns the actual snapshots used, which may differ by no more than three days from a
 requested endpoint. Missing endpoints yield `insufficient_data`. A zero start yields an absolute
 change and `undefined_percentage`; Signal never substitutes an arbitrary denominator.
-

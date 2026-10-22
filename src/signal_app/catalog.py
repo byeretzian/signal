@@ -79,11 +79,14 @@ def import_artist(
     session: Session,
     artist: NormalizedArtist,
     releases: list[NormalizedRelease],
+    *,
+    include_demo_metrics: bool = False,
 ) -> Artist:
     persisted = upsert_artist(session, artist)
     for release in releases:
         upsert_release(session, release, persisted)
-    seed_demo_snapshots_for_artist(session, persisted)
+    if include_demo_metrics:
+        seed_demo_snapshots_for_artist(session, persisted)
     session.commit()
     session.refresh(persisted)
     return persisted

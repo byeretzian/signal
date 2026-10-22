@@ -11,20 +11,12 @@ import structlog
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from signal_app.domain import NormalizedArtist, NormalizedRelease
+from signal_app.providers.errors import (
+    ProviderResponseError,
+    ProviderUnavailableError,
+)
 
 logger = structlog.get_logger(__name__)
-
-
-class ProviderError(RuntimeError):
-    """Base error for an external metadata provider."""
-
-
-class ProviderUnavailableError(ProviderError):
-    pass
-
-
-class ProviderResponseError(ProviderError):
-    pass
 
 
 class MusicBrainzArea(BaseModel):

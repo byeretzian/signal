@@ -24,10 +24,13 @@ from signal_app.agent import (
 from signal_app.catalog import ArtistNotFoundError, get_artist, import_artist
 from signal_app.config import Settings, get_settings
 from signal_app.db import get_session
-from signal_app.domain import ArtistRead, NormalizedArtist, ReleaseRead
+from signal_app.domain import ArtistRead, MetricSnapshotRead, NormalizedArtist, ReleaseRead
+from signal_app.ingestion import MissingArtistExternalIdError, refresh_artist_metrics
 from signal_app.logging import configure_logging
-from signal_app.models import Artist, Release
-from signal_app.providers.musicbrainz import MusicBrainzProvider, ProviderError
+from signal_app.models import Artist, ArtistMetricSnapshot, Release
+from signal_app.providers.errors import ProviderError
+from signal_app.providers.listenbrainz import ListenBrainzProvider
+from signal_app.providers.musicbrainz import MusicBrainzProvider
 
 logger = structlog.get_logger(__name__)
 
@@ -71,6 +74,18 @@ def release_to_read(release: Release) -> ReleaseRead:
     )
 
 
+def snapshot_to_read(snapshot: ArtistMetricSnapshot) -> MetricSnapshotRead:
+    return MetricSnapshotRead(
+        id=str(snapshot.id),
+        artist_id=str(snapshot.artist_id),
+        snapshot_date=snapshot.snapshot_date,
+        source=snapshot.source,
+        listen_count=snapshot.listen_count,
+        listener_count=snapshot.listener_count,
+        provider_metadata=snapshot.provider_metadata,
+    )
+
+
 @lru_cache
 def get_musicbrainz_provider() -> MusicBrainzProvider:
     settings = get_settings()
@@ -78,6 +93,17 @@ def get_musicbrainz_provider() -> MusicBrainzProvider:
         base_url=settings.musicbrainz_base_url,
         user_agent=settings.musicbrainz_user_agent,
         timeout_seconds=settings.musicbrainz_timeout_seconds,
+    )
+
+
+@lru_cache
+def get_listenbrainz_provider() -> ListenBrainzProvider:
+    settings = get_settings()
+    return ListenBrainzProvider(
+        base_url=settings.listenbrainz_base_url,
+        user_agent=settings.listenbrainz_user_agent,
+        user_token=settings.listenbrainz_user_token,
+        timeout_seconds=settings.listenbrainz_timeout_seconds,
     )
 
 
@@ -146,11 +172,17 @@ def import_musicbrainz_artist(
     musicbrainz_id: str,
     session: Annotated[Session, Depends(get_session)],
     provider: Annotated[MusicBrainzProvider, Depends(get_musicbrainz_provider)],
+    include_demo_metrics: Annotated[bool, Query()] = False,
 ) -> ImportedArtistResponse:
     try:
         normalized = provider.get_artist(musicbrainz_id)
         releases = provider.get_artist_releases(musicbrainz_id)
-        persisted = import_artist(session, normalized, releases)
+        persisted = import_artist(
+            session,
+            normalized,
+            releases,
+            include_demo_metrics=include_demo_metrics,
+        )
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return ImportedArtistResponse(artist=artist_to_read(persisted), release_count=len(releases))
@@ -175,6 +207,24 @@ def read_artist_releases(
     except ArtistNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Artist not found") from exc
     return [release_to_read(release) for release in artist.releases]
+
+
+@app.post("/artists/{artist_id}/metrics/refresh", response_model=MetricSnapshotRead)
+def refresh_artist_listening_metrics(
+    artist_id: uuid.UUID,
+    session: Annotated[Session, Depends(get_session)],
+    provider: Annotated[ListenBrainzProvider, Depends(get_listenbrainz_provider)],
+) -> MetricSnapshotRead:
+    try:
+        artist = get_artist(session, artist_id)
+        snapshot = refresh_artist_metrics(session, artist=artist, provider=provider)
+    except ArtistNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Artist not found") from exc
+    except MissingArtistExternalIdError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return snapshot_to_read(snapshot)
 
 
 @app.post("/query", response_model=QueryResponse)
